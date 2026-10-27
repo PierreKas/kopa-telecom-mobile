@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { PinInput } from '@/components/ui/pin-input';
 import { getApiErrorMessage } from '@/lib/api-error-message';
 import { Colors } from '@/constants/theme';
+import { USE_MOCK } from '@/lib/mock-config';
 import { useChangePinMutation } from '@/store/identityApi';
 
 const schema = z.object({
@@ -20,6 +22,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function PinChange() {
   const [changePin, { isLoading, error }] = useChangePinMutation();
+  const [isMockSubmitting, setIsMockSubmitting] = useState(false);
   const {
     control,
     handleSubmit,
@@ -28,12 +31,20 @@ export default function PinChange() {
 
   async function onSubmit(values: FormValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockSubmitting(true);
+        setIsMockSubmitting(false);
+        router.back();
+        return;
+      }
       await changePin(values).unwrap();
       router.back();
     } catch {
       // error shown below via the mutation's `error`
     }
   }
+
+  const submitting = USE_MOCK ? isMockSubmitting : isLoading;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -77,7 +88,7 @@ export default function PinChange() {
         </View>
 
         <View className="mt-8">
-          <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+          <Button onPress={handleSubmit(onSubmit)} loading={submitting}>
             Update PIN
           </Button>
         </View>

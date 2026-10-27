@@ -1,5 +1,6 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +10,7 @@ import { KopaIcon } from '@/components/brand/kopa-logo';
 import { Button } from '@/components/ui/button';
 import { PinInput } from '@/components/ui/pin-input';
 import { getApiErrorMessage } from '@/lib/api-error-message';
+import { USE_MOCK } from '@/lib/mock-config';
 import { useSetPinMutation } from '@/store/identityApi';
 
 const schema = z
@@ -23,6 +25,7 @@ type FormValues = z.infer<typeof schema>;
  *  an authenticated call even though no PIN has ever been set yet (AuthService.setPin javadoc). */
 export default function SetPin() {
   const [setPin, { isLoading, error }] = useSetPinMutation();
+  const [isMockSubmitting, setIsMockSubmitting] = useState(false);
   const {
     control,
     handleSubmit,
@@ -31,12 +34,20 @@ export default function SetPin() {
 
   async function onSubmit(values: FormValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockSubmitting(true);
+        setIsMockSubmitting(false);
+        router.replace('/(app)/home');
+        return;
+      }
       await setPin({ pin: values.pin }).unwrap();
       router.replace('/(app)/home');
     } catch {
       // error shown below via the mutation's `error`
     }
   }
+
+  const submitting = USE_MOCK ? isMockSubmitting : isLoading;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -81,7 +92,7 @@ export default function SetPin() {
         </View>
 
         <View className="mt-8">
-          <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+          <Button onPress={handleSubmit(onSubmit)} loading={submitting}>
             Continue
           </Button>
         </View>

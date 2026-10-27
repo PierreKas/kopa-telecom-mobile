@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { PinInput } from '@/components/ui/pin-input';
 import { getApiErrorMessage } from '@/lib/api-error-message';
 import { Colors } from '@/constants/theme';
+import { USE_MOCK } from '@/lib/mock-config';
 import { useConfirmPinResetMutation } from '@/store/identityApi';
 
 const schema = z.object({
@@ -21,6 +23,7 @@ type FormValues = z.infer<typeof schema>;
 export default function ResetPin() {
   const { msisdn } = useLocalSearchParams<{ msisdn: string }>();
   const [confirmReset, { isLoading, error }] = useConfirmPinResetMutation();
+  const [isMockSubmitting, setIsMockSubmitting] = useState(false);
   const {
     control,
     handleSubmit,
@@ -29,12 +32,20 @@ export default function ResetPin() {
 
   async function onSubmit(values: FormValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockSubmitting(true);
+        setIsMockSubmitting(false);
+        router.replace('/(auth)/login-step1');
+        return;
+      }
       await confirmReset({ msisdn: msisdn ?? '', ...values }).unwrap();
-      router.replace('/(auth)/login');
+      router.replace('/(auth)/login-step1');
     } catch {
       // error shown below via the mutation's `error`
     }
   }
+
+  const submitting = USE_MOCK ? isMockSubmitting : isLoading;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -79,7 +90,7 @@ export default function ResetPin() {
         </View>
 
         <View className="mt-8">
-          <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+          <Button onPress={handleSubmit(onSubmit)} loading={submitting}>
             Reset PIN
           </Button>
         </View>

@@ -37,15 +37,20 @@ export interface TransactionResult {
 }
 
 export interface StatementEntry {
-  id: string;
+  id: string | null;
+  // "LOCAL" (this app's own transactions table) or "KTRN_HISTORY" (HP00005/HPOP101's
+  // BUNDLE_HIST) - the two have different provenance and no local id for KTRN_HISTORY rows.
+  source: 'LOCAL' | 'KTRN_HISTORY';
   transactionType: string;
   productCode: string | null;
   amount: string | null;
   currency: string;
   status: string;
   ktrnMessage: string | null;
-  requestedAt: string;
+  requestedAt: string | null;
   completedAt: string | null;
+  // Only ever populated for KTRN_HISTORY entries (the bundle's validity end).
+  expiresAt: string | null;
 }
 
 // Every customer-self-care endpoint wraps its success body in ApiResponse<T> — unlike

@@ -14,8 +14,6 @@ import { z } from "zod";
 import { KopaWordmark } from "@/components/brand/kopa-logo";
 import { Button } from "@/components/ui/button";
 import { TextField } from "@/components/ui/text-field";
-import { useAppDispatch } from "@/store/hooks";
-import { useLoginMutation } from "@/store/identityApi";
 
 const schema = z.object({
   msisdn: z.string().regex(/^\d{6,15}$/, "Enter a valid phone number"),
@@ -24,9 +22,10 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
+// This step only collects the MSISDN and hands off to login-step2, which collects the PIN and
+// makes the actual /auth/login call (it needs both together) - there is no API call to make or
+// mock here.
 export default function Login() {
-  const dispatch = useAppDispatch();
-  const [login, { isLoading, error }] = useLoginMutation();
   const {
     control,
     handleSubmit,
@@ -36,17 +35,11 @@ export default function Login() {
     defaultValues: { msisdn: "" },
   });
 
-  async function onSubmit(values: FormValues) {
-    try {
-      // const response = await login(values).unwrap();
-      // dispatch(sessionEstablished(response));
-      router.push({
-        pathname: "/(auth)/login-step2",
-        params: { msisdn: values.msisdn },
-      });
-    } catch {
-      // error state already reflected via the `error` returned from the mutation hook
-    }
+  function onSubmit(values: FormValues) {
+    router.push({
+      pathname: "/(auth)/login-step2",
+      params: { msisdn: values.msisdn },
+    });
   }
 
   return (
@@ -119,9 +112,7 @@ export default function Login() {
               Forgot PIN?
             </Link> */}
 
-            <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
-              Next
-            </Button>
+            <Button onPress={handleSubmit(onSubmit)}>Next</Button>
           </View>
 
           <View className="mt-8 flex-row justify-center gap-1">

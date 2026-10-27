@@ -151,6 +151,15 @@ import { Card } from "@/components/ui/card";
 import { StatusPill, type StatusTone } from "@/components/ui/status-pill";
 import { Colors, HeroGradient } from "@/constants/theme";
 import { toggleArcMenu, useArcMenuOpen } from "@/lib/arc-menu-store";
+import { USE_MOCK } from "@/lib/mock-config";
+import {
+  MOCK_AVATAR_URL,
+  MOCK_BALANCE,
+  MOCK_MSISDN,
+  MOCK_PROFILE,
+  MOCK_STATEMENT_ENTRIES,
+  MOCK_USAGE_ITEMS,
+} from "@/lib/mock-data";
 import { useAppSelector } from "@/store/hooks";
 import { useGetProfileQuery } from "@/store/identityApi";
 import {
@@ -159,51 +168,12 @@ import {
   useGetUsageQuery,
 } from "@/store/selfCareApi";
 
-// Flip to false once the backend is ready.
-const USE_MOCK = true;
-
 function transactionIcon(type: string): keyof typeof Feather.glyphMap {
   if (type.startsWith("RECHARGE")) return "plus-circle";
   if (type === "BUNDLE_PURCHASE") return "package";
-  if (type === "USAGE") return "activity";
+  if (type === "PURCHASE" || type === "CANCEL") return "package";
   return "repeat";
 }
-const MOCK = {
-  user: {
-    fullName: "Sarah Uwase",
-    avatarUrl: "https://i.pravatar.cc/200?img=47",
-  },
-  msisdn: "0771234567",
-  balance: { currency: "RWF", remainingAmount: "12,450" },
-  dataLeft: "3.2 GB",
-  voiceLeft: "145 min",
-  entries: [
-    {
-      id: "TX-1001",
-      transactionType: "RECHARGE_AIRTIME",
-      requestedAt: "2026-10-20T14:32:00Z",
-      amount: "5,000",
-      currency: "RWF",
-      status: "SUCCESS",
-    },
-    {
-      id: "TX-1002",
-      transactionType: "BUNDLE_PURCHASE",
-      requestedAt: "2026-10-18T09:10:00Z",
-      amount: "2,500",
-      currency: "RWF",
-      status: "OTP_PENDING",
-    },
-    {
-      id: "TX-1003",
-      transactionType: "BUNDLE_PURCHASE",
-      requestedAt: "2026-10-15T19:45:00Z",
-      amount: "1,000",
-      currency: "RWF",
-      status: "FAILED",
-    },
-  ],
-};
 
 function statusTone(status: string): StatusTone {
   if (status === "SUCCESS") return "success";
@@ -216,12 +186,14 @@ export default function Home() {
   const menuOpen = useArcMenuOpen();
   const { data: profile } = useGetProfileQuery(undefined, { skip: USE_MOCK });
   const fullName = USE_MOCK
-    ? MOCK.user.fullName
+    ? MOCK_PROFILE.fullName
     : (profile?.fullName ?? "Customer");
-  const avatarUrl = USE_MOCK ? MOCK.user.avatarUrl : undefined; // see note below
-  ///
+  // ProfileResponse has no avatar field at all - this is a frontend-only placeholder either way,
+  // mock or real, not something that will ever come from the API.
+  const avatarUrl = MOCK_AVATAR_URL;
+
   const session = useAppSelector((state) => state.auth.session);
-  const msisdn = session?.msisdn ?? (USE_MOCK ? MOCK.msisdn : "");
+  const msisdn = session?.msisdn ?? (USE_MOCK ? MOCK_MSISDN : "");
 
   const skip = USE_MOCK || !msisdn;
   const balanceQuery = useGetBalanceQuery(msisdn, { skip });
@@ -237,28 +209,31 @@ export default function Home() {
     void statementQuery.refetch();
   }
 
+  const balance = USE_MOCK ? MOCK_BALANCE : balanceQuery.data;
+  const usageItems = USE_MOCK
+    ? MOCK_USAGE_ITEMS
+    : (usageQuery.data?.items ?? []);
   const entries = USE_MOCK
-    ? MOCK.entries
+    ? MOCK_STATEMENT_ENTRIES
     : (statementQuery.data?.entries ?? []);
   const recentEntries = entries.slice(0, 3);
 
-  const dataItem = usageQuery.data?.items.find((item) =>
+  // Same derivation for mock and real data - both are the exact same UsageItem[] shape.
+  const dataItem = usageItems.find((item) =>
     item.productName?.toLowerCase().includes("data"),
   );
-  const voiceItem = usageQuery.data?.items.find((item) =>
+  const voiceItem = usageItems.find((item) =>
     item.productName?.toLowerCase().includes("voice"),
   );
 
-  const dataLeft = USE_MOCK ? MOCK.dataLeft : (dataItem?.remaining ?? "—");
-  const voiceLeft = USE_MOCK ? MOCK.voiceLeft : (voiceItem?.remaining ?? "—");
+  const dataLeft = dataItem?.remaining ?? "—";
+  const voiceLeft = voiceItem?.remaining ?? "—";
 
-  const balanceText = USE_MOCK
-    ? `${MOCK.balance.currency} ${MOCK.balance.remainingAmount}`
-    : balanceQuery.data
-      ? `${balanceQuery.data.currency} ${balanceQuery.data.remainingAmount}`
-      : balanceQuery.isLoading
-        ? "…"
-        : "—";
+  const balanceText = balance
+    ? `${balance.currency} ${balance.remainingAmount}`
+    : !USE_MOCK && balanceQuery.isLoading
+      ? "…"
+      : "—";
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={["top"]}>
@@ -434,7 +409,7 @@ export default function Home() {
           </Card>
         ) : (
           <View className="mt-3 gap-2">
-            {recentEntries.map((entry) => (
+            {recentEntries.map((entry, index) => (
               // <Card
               //   key={entry.id}
               //   className="flex-row items-center justify-between"
@@ -459,7 +434,12 @@ export default function Home() {
               //     />
               //   </View>
               // </Card>
-              <Card key={entry.id} className="flex-row items-center gap-3">
+              // KTRN_HISTORY entries have no local id (StatementEntry.id is nullable) - fall
+              // back to source+date+index, which is still unique within this list.
+              <Card
+                key={entry.id ?? `${entry.source}-${entry.requestedAt}-${index}`}
+                className="flex-row items-center gap-3"
+              >
                 {/* Icon */}
                 <View className="h-11 w-11 items-center justify-center rounded-full bg-accent">
                   <Feather
@@ -475,7 +455,9 @@ export default function Home() {
                     {entry.transactionType.replace(/_/g, " ")}
                   </Text>
                   <Text className="mt-1 text-xs text-muted-foreground">
-                    {new Date(entry.requestedAt).toLocaleDateString()}
+                    {entry.requestedAt
+                      ? new Date(entry.requestedAt).toLocaleDateString()
+                      : "—"}
                   </Text>
                 </View>
 

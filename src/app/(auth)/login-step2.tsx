@@ -1,5 +1,6 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import {
   KeyboardAvoidingView,
@@ -15,6 +16,9 @@ import { KopaWordmark } from "@/components/brand/kopa-logo";
 import { Button } from "@/components/ui/button";
 import { PinInput } from "@/components/ui/pin-input";
 import { getApiErrorMessage } from "@/lib/api-error-message";
+import { USE_MOCK } from "@/lib/mock-config";
+import { MOCK_LOGIN_RESPONSE } from "@/lib/mock-data";
+import { sessionEstablished } from "@/store/authSlice";
 import { useAppDispatch } from "@/store/hooks";
 import { useLoginMutation } from "@/store/identityApi";
 
@@ -28,6 +32,7 @@ type FormValues = z.infer<typeof schema>;
 export default function Login() {
   const dispatch = useAppDispatch();
   const [login, { isLoading, error }] = useLoginMutation();
+  const [isMockLoggingIn, setIsMockLoggingIn] = useState(false);
   const { msisdn } = useLocalSearchParams<{ msisdn: string }>();
 
   const {
@@ -41,14 +46,22 @@ export default function Login() {
 
   async function onSubmit(values: FormValues) {
     try {
-      /////I comment this just to test as the backen is not yet ready.
-      // const response = await login({ msisdn, pin: values.pin }).unwrap();
-      // dispatch(sessionEstablished(response));
+      if (USE_MOCK) {
+        setIsMockLoggingIn(true);
+        dispatch(sessionEstablished({ ...MOCK_LOGIN_RESPONSE, msisdn: msisdn ?? MOCK_LOGIN_RESPONSE.msisdn }));
+        setIsMockLoggingIn(false);
+        router.replace("/(app)/home");
+        return;
+      }
+      const response = await login({ msisdn, pin: values.pin }).unwrap();
+      dispatch(sessionEstablished(response));
       router.replace("/(app)/home");
     } catch {
       // error state already reflected via the `error` returned from the mutation hook
     }
   }
+
+  const loggingIn = USE_MOCK ? isMockLoggingIn : isLoading;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -120,7 +133,7 @@ export default function Login() {
               Forgot PIN?
             </Link>
 
-            <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+            <Button onPress={handleSubmit(onSubmit)} loading={loggingIn}>
               Login
             </Button>
           </View>

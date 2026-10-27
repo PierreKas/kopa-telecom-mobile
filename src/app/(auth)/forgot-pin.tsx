@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { Pressable, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { getApiErrorMessage } from '@/lib/api-error-message';
 import { Colors } from '@/constants/theme';
+import { USE_MOCK } from '@/lib/mock-config';
 import { useRequestPinResetMutation } from '@/store/identityApi';
 
 const schema = z.object({ msisdn: z.string().regex(/^\d{6,15}$/, 'Enter a valid phone number') });
@@ -17,6 +19,7 @@ type FormValues = z.infer<typeof schema>;
 
 export default function ForgotPin() {
   const [requestReset, { isLoading, error }] = useRequestPinResetMutation();
+  const [isMockSubmitting, setIsMockSubmitting] = useState(false);
   const {
     control,
     handleSubmit,
@@ -25,12 +28,20 @@ export default function ForgotPin() {
 
   async function onSubmit(values: FormValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockSubmitting(true);
+        setIsMockSubmitting(false);
+        router.push({ pathname: '/(auth)/reset-pin', params: { msisdn: values.msisdn } });
+        return;
+      }
       await requestReset(values).unwrap();
       router.push({ pathname: '/(auth)/reset-pin', params: { msisdn: values.msisdn } });
     } catch {
       // error shown below via the mutation's `error`
     }
   }
+
+  const submitting = USE_MOCK ? isMockSubmitting : isLoading;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -69,7 +80,7 @@ export default function ForgotPin() {
         />
 
         <View className="mt-8">
-          <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+          <Button onPress={handleSubmit(onSubmit)} loading={submitting}>
             Send code
           </Button>
         </View>

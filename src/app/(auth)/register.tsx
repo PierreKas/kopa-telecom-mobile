@@ -1,51 +1,81 @@
-import { Feather } from '@expo/vector-icons';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { router } from 'expo-router';
-import { useState } from 'react';
-import { Controller, useForm } from 'react-hook-form';
-import { Pressable, ScrollView, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { z } from 'zod';
+import { Feather } from "@expo/vector-icons";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { router } from "expo-router";
+import { useState } from "react";
+import { Controller, useForm } from "react-hook-form";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { z } from "zod";
 
-import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { TextField } from '@/components/ui/text-field';
-import { getApiErrorMessage } from '@/lib/api-error-message';
-import { Colors } from '@/constants/theme';
-import { sessionEstablished } from '@/store/authSlice';
-import { useAppDispatch } from '@/store/hooks';
-import { useActivateMutation, useGetMsisdnSuggestionsQuery, useLazyGetMsisdnStatusQuery } from '@/store/identityApi';
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { DateField } from "@/components/ui/date-field";
+import { TextField } from "@/components/ui/text-field";
+import { Colors } from "@/constants/theme";
+import { getApiErrorMessage } from "@/lib/api-error-message";
+import { USE_MOCK } from "@/lib/mock-config";
+import {
+  MOCK_ACTIVATE_RESPONSE,
+  MOCK_MSISDN_STATUS,
+  MOCK_MSISDN_SUGGESTIONS,
+} from "@/lib/mock-data";
+import { sessionEstablished } from "@/store/authSlice";
+import { useAppDispatch } from "@/store/hooks";
+import {
+  useActivateMutation,
+  useGetMsisdnSuggestionsQuery,
+  useLazyGetMsisdnStatusQuery,
+} from "@/store/identityApi";
 
 const CUST_TYPES = [
-  { value: 'A', label: 'Individual' },
-  { value: 'B', label: 'Self-employed' },
-  { value: 'C', label: 'Foreigner' },
-  { value: 'D', label: 'Corporate' },
-  { value: 'E', label: 'Public sector' },
+  { value: "A", label: "Individual" },
+  { value: "B", label: "Self-employed" },
+  { value: "C", label: "Foreigner" },
+  { value: "D", label: "Corporate" },
+  { value: "E", label: "Public sector" },
 ] as const;
 
 const schema = z.object({
-  msisdn: z.string().regex(/^\d{6,15}$/, 'Choose or enter a valid phone number'),
-  custType: z.enum(['A', 'B', 'C', 'D', 'E']),
-  fullName: z.string().min(2, 'Enter your full name'),
-  birthDay: z.string().regex(/^\d{8}$/, 'Use YYYYMMDD, e.g. 19950414'),
-  addressDetail: z.string().min(2, 'Enter your address'),
-  email: z.string().email('Enter a valid email').optional().or(z.literal('')),
+  msisdn: z
+    .string()
+    .regex(/^\d{6,15}$/, "Choose or enter a valid phone number"),
+  custType: z.enum(["A", "B", "C", "D", "E"]),
+  fullName: z.string().min(2, "Enter your full name"),
+  birthDay: z.string().regex(/^\d{8}$/, "Use YYYYMMDD, e.g. 19950414"),
+  addressDetail: z.string().min(2, "Enter your address"),
+  email: z.string().email("Enter a valid email").optional().or(z.literal("")),
   corpRegNo: z.string().optional(),
   bizRegNo: z.string().optional(),
-  iccid: z.string().regex(/^\d{10,19}$/, 'ICCID must be 10-19 digits (printed on the SIM)'),
-  productCode: z.string().min(1, 'Enter the price plan product code'),
+  iccid: z
+    .string()
+    .regex(/^\d{10,19}$/, "ICCID must be 10-19 digits (printed on the SIM)"),
+  productCode: z.string().min(1, "Enter the price plan product code"),
 });
 type FormValues = z.infer<typeof schema>;
 
-const STEPS = ['Number', 'Your details', 'SIM & plan', 'Review'] as const;
+const STEPS = ["Number", "Your details", "SIM & plan", "Review"] as const;
 
 export default function Register() {
   const dispatch = useAppDispatch();
   const [step, setStep] = useState(0);
-  const { data: suggestions } = useGetMsisdnSuggestionsQuery();
-  const [checkStatus, { data: statusResult, isFetching: checkingStatus }] = useLazyGetMsisdnStatusQuery();
+  const { data: suggestionsData } = useGetMsisdnSuggestionsQuery(undefined, {
+    skip: USE_MOCK,
+  });
+  const [checkStatus, { data: statusResultData, isFetching: checkingStatus }] =
+    useLazyGetMsisdnStatusQuery();
   const [activate, { isLoading, error }] = useActivateMutation();
+  const [mockCheckedMsisdn, setMockCheckedMsisdn] = useState<string | null>(
+    null,
+  );
+  const [isMockActivating, setIsMockActivating] = useState(false);
+
+  const suggestions = USE_MOCK ? MOCK_MSISDN_SUGGESTIONS : suggestionsData;
+  const statusResult = USE_MOCK
+    ? mockCheckedMsisdn
+      ? MOCK_MSISDN_STATUS
+      : undefined
+    : statusResultData;
+  const activating = USE_MOCK ? isMockActivating : isLoading;
 
   const {
     control,
@@ -56,27 +86,36 @@ export default function Register() {
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      msisdn: '',
-      custType: 'A',
-      fullName: '',
-      birthDay: '',
-      addressDetail: '',
-      email: '',
-      corpRegNo: '',
-      bizRegNo: '',
-      iccid: '',
-      productCode: '',
+      msisdn: "",
+      custType: "A",
+      fullName: "",
+      birthDay: "",
+      addressDetail: "",
+      email: "",
+      corpRegNo: "",
+      bizRegNo: "",
+      iccid: "",
+      productCode: "",
     },
   });
 
-  const custType = watch('custType');
-  const needsBizRegNo = custType === 'B' || custType === 'D' || custType === 'E';
+  const custType = watch("custType");
+  const needsBizRegNo =
+    custType === "B" || custType === "D" || custType === "E";
 
   async function goNext() {
     const fieldsByStep: (keyof FormValues)[][] = [
-      ['msisdn'],
-      ['custType', 'fullName', 'birthDay', 'addressDetail', 'email', 'corpRegNo', 'bizRegNo'],
-      ['iccid', 'productCode'],
+      ["msisdn"],
+      [
+        "custType",
+        "fullName",
+        "birthDay",
+        "addressDetail",
+        "email",
+        "corpRegNo",
+        "bizRegNo",
+      ],
+      ["iccid", "productCode"],
       [],
     ];
     const valid = await trigger(fieldsByStep[step]);
@@ -90,6 +129,21 @@ export default function Register() {
 
   async function onSubmit(values: FormValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockActivating(true);
+        const response = { ...MOCK_ACTIVATE_RESPONSE, msisdn: values.msisdn };
+        setIsMockActivating(false);
+        dispatch(
+          sessionEstablished({
+            customerId: response.customerId,
+            msisdn: response.msisdn,
+            token: response.token,
+            expiresAt: response.expiresAt,
+          }),
+        );
+        router.replace("/(auth)/set-pin");
+        return;
+      }
       const response = await activate({
         msisdn: values.msisdn,
         iccid: values.iccid,
@@ -102,8 +156,15 @@ export default function Register() {
         corpRegNo: values.corpRegNo || undefined,
         bizRegNo: values.bizRegNo || undefined,
       }).unwrap();
-      dispatch(sessionEstablished({ customerId: response.customerId, msisdn: response.msisdn, token: response.token, expiresAt: response.expiresAt }));
-      router.replace('/(auth)/set-pin');
+      dispatch(
+        sessionEstablished({
+          customerId: response.customerId,
+          msisdn: response.msisdn,
+          token: response.token,
+          expiresAt: response.expiresAt,
+        }),
+      );
+      router.replace("/(auth)/set-pin");
     } catch {
       // error shown below via the mutation's `error`
     }
@@ -122,15 +183,28 @@ export default function Register() {
 
       <View className="mb-2 flex-row gap-1.5 px-6">
         {STEPS.map((label, i) => (
-          <View key={label} className="h-1.5 flex-1 rounded-full" style={{ backgroundColor: i <= step ? Colors.primary : Colors.gray5 }} />
+          <View
+            key={label}
+            className="h-1.5 flex-1 rounded-full"
+            style={{
+              backgroundColor: i <= step ? Colors.primary : Colors.gray5,
+            }}
+          />
         ))}
       </View>
 
-      <ScrollView contentContainerClassName="px-6 py-6 gap-5" keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerClassName="px-6 py-6 gap-5"
+        keyboardShouldPersistTaps="handled"
+      >
         {step === 0 && (
           <>
-            <Text className="mb-1 text-2xl font-bold text-foreground">Choose your number</Text>
-            <Text className="mb-2 text-base text-muted-foreground">Pick one of the available numbers below, or enter your own.</Text>
+            <Text className="mb-1 text-2xl font-bold text-foreground">
+              Choose your number
+            </Text>
+            <Text className="mb-2 text-base text-muted-foreground">
+              Pick one of the available numbers below, or enter your own.
+            </Text>
 
             {suggestions?.msisdns.length ? (
               <View className="flex-row flex-wrap gap-2">
@@ -144,10 +218,25 @@ export default function Register() {
                         onPress={() => field.onChange(number)}
                         className="rounded-full border px-4 py-2"
                         style={{
-                          borderColor: field.value === number ? Colors.primary : Colors.border,
-                          backgroundColor: field.value === number ? Colors.primary : 'transparent',
-                        }}>
-                        <Text style={{ color: field.value === number ? Colors.white : Colors.textPrimary }} className="font-medium">
+                          borderColor:
+                            field.value === number
+                              ? Colors.primary
+                              : Colors.border,
+                          backgroundColor:
+                            field.value === number
+                              ? Colors.primary
+                              : "transparent",
+                        }}
+                      >
+                        <Text
+                          style={{
+                            color:
+                              field.value === number
+                                ? Colors.white
+                                : Colors.textPrimary,
+                          }}
+                          className="font-medium"
+                        >
                           {number}
                         </Text>
                       </Pressable>
@@ -168,15 +257,27 @@ export default function Register() {
                   leftIcon="smartphone"
                   value={field.value}
                   onChangeText={(text) => field.onChange(text)}
-                  onEndEditing={() => field.value.length >= 6 && checkStatus(field.value)}
+                  onEndEditing={() => {
+                    if (field.value.length < 6) return;
+                    if (USE_MOCK) setMockCheckedMsisdn(field.value);
+                    else checkStatus(field.value);
+                  }}
                   error={errors.msisdn?.message}
                 />
               )}
             />
-            {checkingStatus ? <Text className="text-sm text-muted-foreground">Checking availability…</Text> : null}
+            {checkingStatus ? (
+              <Text className="text-sm text-muted-foreground">
+                Checking availability…
+              </Text>
+            ) : null}
             {statusResult && !checkingStatus ? (
-              <Text className={`text-sm ${statusResult.available ? 'text-success' : 'text-destructive'}`}>
-                {statusResult.available ? 'This number is available.' : 'This number is already taken.'}
+              <Text
+                className={`text-sm ${statusResult.available ? "text-success" : "text-destructive"}`}
+              >
+                {statusResult.available
+                  ? "This number is available."
+                  : "This number is already taken."}
               </Text>
             ) : null}
           </>
@@ -184,10 +285,16 @@ export default function Register() {
 
         {step === 1 && (
           <>
-            <Text className="mb-1 text-2xl font-bold text-foreground">Your details</Text>
-            <Text className="mb-2 text-base text-muted-foreground">This information is sent to KTRN to register your line.</Text>
+            <Text className="mb-1 text-2xl font-bold text-foreground">
+              Your details
+            </Text>
+            <Text className="mb-2 text-base text-muted-foreground">
+              This information will be used to register your line.
+            </Text>
 
-            <Text className="text-sm font-medium text-foreground">Customer type</Text>
+            <Text className="text-sm font-medium text-foreground">
+              Customer type
+            </Text>
             <Controller
               control={control}
               name="custType"
@@ -199,10 +306,25 @@ export default function Register() {
                       onPress={() => field.onChange(type.value)}
                       className="rounded-full border px-4 py-2"
                       style={{
-                        borderColor: field.value === type.value ? Colors.primary : Colors.border,
-                        backgroundColor: field.value === type.value ? Colors.primary : 'transparent',
-                      }}>
-                      <Text style={{ color: field.value === type.value ? Colors.white : Colors.textPrimary }} className="font-medium">
+                        borderColor:
+                          field.value === type.value
+                            ? Colors.primary
+                            : Colors.border,
+                        backgroundColor:
+                          field.value === type.value
+                            ? Colors.primary
+                            : "transparent",
+                      }}
+                    >
+                      <Text
+                        style={{
+                          color:
+                            field.value === type.value
+                              ? Colors.white
+                              : Colors.textPrimary,
+                        }}
+                        className="font-medium"
+                      >
                         {type.label}
                       </Text>
                     </Pressable>
@@ -215,10 +337,29 @@ export default function Register() {
               control={control}
               name="fullName"
               render={({ field }) => (
-                <TextField label="Full name" placeholder="Jane Uwimana" leftIcon="user" value={field.value} onChangeText={field.onChange} error={errors.fullName?.message} />
+                <TextField
+                  label="Full name"
+                  placeholder="Jane Uwimana"
+                  leftIcon="user"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.fullName?.message}
+                />
               )}
             />
             <Controller
+              control={control}
+              name="birthDay"
+              render={({ field }) => (
+                <DateField
+                  label="Date of birth"
+                  value={field.value}
+                  onChange={field.onChange}
+                  error={errors.birthDay?.message}
+                />
+              )}
+            />
+            {/* <Controller
               control={control}
               name="birthDay"
               render={({ field }) => (
@@ -232,19 +373,35 @@ export default function Register() {
                   error={errors.birthDay?.message}
                 />
               )}
-            />
+            /> */}
             <Controller
               control={control}
               name="addressDetail"
               render={({ field }) => (
-                <TextField label="Address" placeholder="KG 11 Ave, Kigali" leftIcon="map-pin" value={field.value} onChangeText={field.onChange} error={errors.addressDetail?.message} />
+                <TextField
+                  label="Address"
+                  placeholder="KG 11 Ave, Kigali"
+                  leftIcon="map-pin"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.addressDetail?.message}
+                />
               )}
             />
             <Controller
               control={control}
               name="email"
               render={({ field }) => (
-                <TextField label="Email (optional)" placeholder="jane@example.com" keyboardType="email-address" autoCapitalize="none" leftIcon="mail" value={field.value} onChangeText={field.onChange} error={errors.email?.message} />
+                <TextField
+                  label="Email (optional)"
+                  placeholder="jane@example.com"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  leftIcon="mail"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.email?.message}
+                />
               )}
             />
             <Controller
@@ -252,7 +409,7 @@ export default function Register() {
               name="corpRegNo"
               render={({ field }) => (
                 <TextField
-                  label={custType === 'C' ? 'Passport number' : 'National ID'}
+                  label={custType === "C" ? "Passport number" : "National ID"}
                   placeholder="1 1990 8 1234567 1 23"
                   leftIcon="credit-card"
                   value={field.value}
@@ -264,7 +421,14 @@ export default function Register() {
               <Controller
                 control={control}
                 name="bizRegNo"
-                render={({ field }) => <TextField label="Business registration number" leftIcon="briefcase" value={field.value} onChangeText={field.onChange} />}
+                render={({ field }) => (
+                  <TextField
+                    label="Business registration number"
+                    leftIcon="briefcase"
+                    value={field.value}
+                    onChangeText={field.onChange}
+                  />
+                )}
               />
             ) : null}
           </>
@@ -272,8 +436,13 @@ export default function Register() {
 
         {step === 2 && (
           <>
-            <Text className="mb-1 text-2xl font-bold text-foreground">SIM & plan</Text>
-            <Text className="mb-2 text-base text-muted-foreground">Enter the ICCID printed on your SIM card and the price plan you want.</Text>
+            <Text className="mb-1 text-2xl font-bold text-foreground">
+              SIM & plan
+            </Text>
+            <Text className="mb-2 text-base text-muted-foreground">
+              Enter the ICCID printed on your SIM card and the price plan you
+              want.
+            </Text>
             <Controller
               control={control}
               name="iccid"
@@ -293,7 +462,14 @@ export default function Register() {
               control={control}
               name="productCode"
               render={({ field }) => (
-                <TextField label="Price plan code" placeholder="e.g. PD00000574" leftIcon="tag" value={field.value} onChangeText={field.onChange} error={errors.productCode?.message} />
+                <TextField
+                  label="Price plan code"
+                  placeholder="e.g. PD00000574"
+                  leftIcon="tag"
+                  value={field.value}
+                  onChangeText={field.onChange}
+                  error={errors.productCode?.message}
+                />
               )}
             />
           </>
@@ -301,23 +477,35 @@ export default function Register() {
 
         {step === 3 && (
           <>
-            <Text className="mb-1 text-2xl font-bold text-foreground">Review</Text>
-            <Text className="mb-2 text-base text-muted-foreground">Check your details before submitting to KTRN.</Text>
+            <Text className="mb-1 text-2xl font-bold text-foreground">
+              Review
+            </Text>
+            <Text className="mb-2 text-base text-muted-foreground">
+              Check your details before submitting them.
+            </Text>
 
             {error ? (
               <View className="rounded-xl bg-destructive/10 p-3">
-                <Text className="text-sm text-destructive">{getApiErrorMessage(error)}</Text>
+                <Text className="text-sm text-destructive">
+                  {getApiErrorMessage(error)}
+                </Text>
               </View>
             ) : null}
 
             <Card className="gap-3">
-              <ReviewRow label="Number" value={watch('msisdn')} />
-              <ReviewRow label="Customer type" value={CUST_TYPES.find((t) => t.value === custType)?.label ?? custType} />
-              <ReviewRow label="Full name" value={watch('fullName')} />
-              <ReviewRow label="Date of birth" value={watch('birthDay')} />
-              <ReviewRow label="Address" value={watch('addressDetail')} />
-              <ReviewRow label="ICCID" value={watch('iccid')} />
-              <ReviewRow label="Price plan" value={watch('productCode')} />
+              <ReviewRow label="Number" value={watch("msisdn")} />
+              <ReviewRow
+                label="Customer type"
+                value={
+                  CUST_TYPES.find((t) => t.value === custType)?.label ??
+                  custType
+                }
+              />
+              <ReviewRow label="Full name" value={watch("fullName")} />
+              <ReviewRow label="Date of birth" value={watch("birthDay")} />
+              <ReviewRow label="Address" value={watch("addressDetail")} />
+              <ReviewRow label="ICCID" value={watch("iccid")} />
+              <ReviewRow label="Price plan" value={watch("productCode")} />
             </Card>
           </>
         )}
@@ -325,7 +513,7 @@ export default function Register() {
 
       <View className="px-6 pb-4 pt-2">
         {step === STEPS.length - 1 ? (
-          <Button onPress={handleSubmit(onSubmit)} loading={isLoading}>
+          <Button onPress={handleSubmit(onSubmit)} loading={activating}>
             Activate my line
           </Button>
         ) : (
@@ -340,7 +528,7 @@ function ReviewRow({ label, value }: { label: string; value?: string }) {
   return (
     <View className="flex-row justify-between border-b border-border/60 pb-3">
       <Text className="text-muted-foreground">{label}</Text>
-      <Text className="font-medium text-foreground">{value || '—'}</Text>
+      <Text className="font-medium text-foreground">{value || "—"}</Text>
     </View>
   );
 }

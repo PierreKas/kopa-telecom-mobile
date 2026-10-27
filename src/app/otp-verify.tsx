@@ -8,6 +8,8 @@ import { Button } from '@/components/ui/button';
 import { PinInput } from '@/components/ui/pin-input';
 import { getApiErrorMessage } from '@/lib/api-error-message';
 import { Colors } from '@/constants/theme';
+import { USE_MOCK } from '@/lib/mock-config';
+import { mockTransactionResult } from '@/lib/mock-data';
 import { useVerifyTransactionOtpMutation } from '@/store/selfCareApi';
 
 /** Shared confirm step for every OTP-gated transaction (recharge-by-amount, bundle purchase) -
@@ -17,9 +19,17 @@ export default function OtpVerify() {
   const { transactionId, msisdn, description } = useLocalSearchParams<{ transactionId: string; msisdn: string; description?: string }>();
   const [code, setCode] = useState('');
   const [verify, { isLoading, error, data }] = useVerifyTransactionOtpMutation();
+  const [mockResult, setMockResult] = useState<ReturnType<typeof mockTransactionResult> | null>(null);
+  const [isMockVerifying, setIsMockVerifying] = useState(false);
 
   async function handleVerify() {
     if (code.length !== 6) return;
+    if (USE_MOCK) {
+      setIsMockVerifying(true);
+      setMockResult(mockTransactionResult('SUCCESS'));
+      setIsMockVerifying(false);
+      return;
+    }
     try {
       await verify({ transactionId, msisdn, code }).unwrap();
     } catch {
@@ -27,15 +37,18 @@ export default function OtpVerify() {
     }
   }
 
-  if (data) {
-    const success = data.status === 'SUCCESS';
+  const outcome = USE_MOCK ? mockResult : data;
+  const verifying = USE_MOCK ? isMockVerifying : isLoading;
+
+  if (outcome) {
+    const success = outcome.status === 'SUCCESS';
     return (
       <SafeAreaView className="flex-1 items-center justify-center bg-background px-8">
         <View className={`mb-5 h-20 w-20 items-center justify-center rounded-full ${success ? 'bg-success/15' : 'bg-destructive/15'}`}>
           <Feather name={success ? 'check' : 'x'} size={40} color={success ? Colors.success : Colors.error} />
         </View>
         <Text className="mb-2 text-center text-2xl font-bold text-foreground">{success ? 'All set!' : 'Transaction failed'}</Text>
-        <Text className="mb-8 text-center text-base text-muted-foreground">{data.ktrnMessage || data.message || data.result || (success ? 'Your transaction was completed successfully.' : 'Please try again.')}</Text>
+        <Text className="mb-8 text-center text-base text-muted-foreground">{outcome.ktrnMessage || outcome.message || outcome.result || (success ? 'Your transaction was completed successfully.' : 'Please try again.')}</Text>
         <Button onPress={() => router.replace('/(app)/home')}>Back to home</Button>
       </SafeAreaView>
     );
@@ -64,7 +77,7 @@ export default function OtpVerify() {
         <PinInput value={code} onChange={setCode} secure={false} autoFocus />
 
         <View className="mt-8">
-          <Button onPress={handleVerify} loading={isLoading} disabled={code.length !== 6}>
+          <Button onPress={handleVerify} loading={verifying} disabled={code.length !== 6}>
             Confirm
           </Button>
         </View>

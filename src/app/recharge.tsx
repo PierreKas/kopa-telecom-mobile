@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { TextField } from '@/components/ui/text-field';
 import { getApiErrorMessage } from '@/lib/api-error-message';
 import { Colors } from '@/constants/theme';
+import { USE_MOCK } from '@/lib/mock-config';
+import { MOCK_MSISDN, mockTransactionResult } from '@/lib/mock-data';
 import { useAppSelector } from '@/store/hooks';
 import { useRechargeByVoucherMutation, useRechargeMutation } from '@/store/selfCareApi';
 
@@ -26,8 +28,11 @@ type VoucherValues = z.infer<typeof voucherSchema>;
 
 export default function Recharge() {
   const session = useAppSelector((state) => state.auth.session);
-  const msisdn = session?.msisdn ?? '';
+  const msisdn = session?.msisdn ?? (USE_MOCK ? MOCK_MSISDN : '');
   const [tab, setTab] = useState<'amount' | 'voucher'>('amount');
+  const [isMockRecharging, setIsMockRecharging] = useState(false);
+  const [isMockVoucherLoading, setIsMockVoucherLoading] = useState(false);
+  const [mockVoucherResult, setMockVoucherResult] = useState<ReturnType<typeof mockTransactionResult> | null>(null);
 
   const [recharge, { isLoading: isRecharging, error: rechargeError }] = useRechargeMutation();
   const [rechargeByVoucher, { isLoading: isVoucherLoading, error: voucherError, data: voucherResult }] = useRechargeByVoucherMutation();
@@ -37,6 +42,13 @@ export default function Recharge() {
 
   async function onSubmitAmount(values: AmountValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockRecharging(true);
+        const result = mockTransactionResult('OTP_PENDING');
+        setIsMockRecharging(false);
+        router.replace({ pathname: '/otp-verify', params: { transactionId: result.transactionId, msisdn, description: `Recharge RWF ${values.amount}` } });
+        return;
+      }
       const result = await recharge({ msisdn, ...values }).unwrap();
       if (result.status === 'OTP_PENDING') {
         router.replace({ pathname: '/otp-verify', params: { transactionId: result.transactionId, msisdn, description: `Recharge RWF ${values.amount}` } });
@@ -48,11 +60,21 @@ export default function Recharge() {
 
   async function onSubmitVoucher(values: VoucherValues) {
     try {
+      if (USE_MOCK) {
+        setIsMockVoucherLoading(true);
+        setMockVoucherResult(mockTransactionResult('SUCCESS'));
+        setIsMockVoucherLoading(false);
+        return;
+      }
       await rechargeByVoucher({ msisdn, ...values }).unwrap();
     } catch {
       // surfaced via voucherError below
     }
   }
+
+  const recharging = USE_MOCK ? isMockRecharging : isRecharging;
+  const voucherLoading = USE_MOCK ? isMockVoucherLoading : isVoucherLoading;
+  const voucherOutcome = USE_MOCK ? mockVoucherResult : voucherResult;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -107,7 +129,7 @@ export default function Recharge() {
                 <TextField label="Mobile money approval no." leftIcon="hash" value={field.value} onChangeText={field.onChange} error={amountForm.formState.errors.approvalNo?.message} />
               )}
             />
-            <Button onPress={amountForm.handleSubmit(onSubmitAmount)} loading={isRecharging}>
+            <Button onPress={amountForm.handleSubmit(onSubmitAmount)} loading={recharging}>
               Continue
             </Button>
           </View>
@@ -118,9 +140,9 @@ export default function Recharge() {
                 <Text className="text-sm text-destructive">{getApiErrorMessage(voucherError)}</Text>
               </View>
             ) : null}
-            {voucherResult ? (
+            {voucherOutcome ? (
               <View className="rounded-xl bg-success/10 p-3">
-                <Text className="text-sm text-success">{voucherResult.ktrnMessage || 'Voucher recharge successful.'}</Text>
+                <Text className="text-sm text-success">{voucherOutcome.ktrnMessage || 'Voucher recharge successful.'}</Text>
               </View>
             ) : null}
             <Controller
@@ -130,7 +152,7 @@ export default function Recharge() {
                 <TextField label="Voucher number" leftIcon="tag" value={field.value} onChangeText={field.onChange} error={voucherForm.formState.errors.voucherNumber?.message} />
               )}
             />
-            <Button onPress={voucherForm.handleSubmit(onSubmitVoucher)} loading={isVoucherLoading}>
+            <Button onPress={voucherForm.handleSubmit(onSubmitVoucher)} loading={voucherLoading}>
               Recharge
             </Button>
           </View>
